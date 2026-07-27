@@ -1741,23 +1741,42 @@ async function loadGameData() {
     }
 
 
-    // Load high score from bridge.storage
+    // Load saved data from Bridge storage
     try {
         if (bridgeReady) {
-            const data = await bridge.storage.get(['survivalHighScore', 'mobholdLevelScores', 'mobholdMaxLevel', 'mobholdLevelDeaths']);
+            const keys = ['survivalHighScore', 'mobholdLevelScores', 'mobholdMaxLevel', 'mobholdLevelDeaths'];
+            let data = await bridge.storage.get(keys);
+
+            // One-time migration from localStorage to Bridge
+            const allNull = data.every(d => d === null);
+            if (allNull) {
+                const lsData = [];
+                for (const key of keys) {
+                    try { lsData.push(localStorage.getItem(key)); } catch (e) { lsData.push(null); }
+                }
+                const hasLsData = lsData.some(v => v !== null);
+                if (hasLsData) {
+                    const migrateKeys = [];
+                    const migrateValues = [];
+                    for (let i = 0; i < keys.length; i++) {
+                        if (lsData[i] !== null) {
+                            migrateKeys.push(keys[i]);
+                            migrateValues.push(lsData[i]);
+                        }
+                    }
+                    await bridge.storage.set(migrateKeys, migrateValues).catch(() => {});
+                    data = await bridge.storage.get(keys);
+                    // Clear localStorage after successful migration
+                    for (const key of keys) {
+                        try { localStorage.removeItem(key); } catch (e) { }
+                    }
+                }
+            }
+
             if (data[0] !== null) highScore = parseInt(data[0], 10) || 0;
             if (data[1] !== null) levelHighScores = JSON.parse(data[1]);
             if (data[2] !== null) maxLevelReached = parseInt(data[2], 10) || 1;
             if (data[3] !== null) levelDeaths = JSON.parse(data[3]);
-        } else {
-            const savedHighScore = localStorage.getItem('survivalHighScore');
-            if (savedHighScore !== null) highScore = parseInt(savedHighScore, 10) || 0;
-            const savedLevelScores = localStorage.getItem('mobholdLevelScores');
-            if (savedLevelScores) levelHighScores = JSON.parse(savedLevelScores);
-            const savedMaxLevel = localStorage.getItem('mobholdMaxLevel');
-            if (savedMaxLevel) maxLevelReached = parseInt(savedMaxLevel, 10) || 1;
-            const savedLevelDeaths = localStorage.getItem('mobholdLevelDeaths');
-            if (savedLevelDeaths) levelDeaths = JSON.parse(savedLevelDeaths);
         }
     } catch (error) {
         console.warn('Failed to load saved data:', error);
@@ -7179,9 +7198,9 @@ let bridgeReady = false;
 
 function saveData(key, value) {
     if (bridgeReady) {
-        bridge.storage.set([key], [value]).catch(() => {});
-    } else {
-        try { localStorage.setItem(key, value); } catch (e) {}
+        bridge.storage.set([key], [value]).catch(err => {
+            console.warn('saveData failed for', key, err);
+        });
     }
 }
 

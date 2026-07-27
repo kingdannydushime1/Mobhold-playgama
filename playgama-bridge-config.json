@@ -1,5 +1,8 @@
 {
     "platforms": {},
+    "storage": {
+        "defaultType": "platform_internal"
+    },
     "advertisement": {
         "minimumDelayBetweenInterstitial": 0,
         "interstitial": {
