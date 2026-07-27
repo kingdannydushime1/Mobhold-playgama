@@ -1749,6 +1749,19 @@ async function loadGameData() {
             if (data[1] !== null) levelHighScores = JSON.parse(data[1]);
             if (data[2] !== null) maxLevelReached = parseInt(data[2], 10) || 1;
             if (data[3] !== null) levelDeaths = JSON.parse(data[3]);
+            // Fallback: if bridge.storage returned all nulls, try localStorage
+            if (data.every(v => v === null)) {
+                try {
+                    const savedHighScore = localStorage.getItem('survivalHighScore');
+                    if (savedHighScore !== null) highScore = parseInt(savedHighScore, 10) || 0;
+                    const savedLevelScores = localStorage.getItem('mobholdLevelScores');
+                    if (savedLevelScores) levelHighScores = JSON.parse(savedLevelScores);
+                    const savedMaxLevel = localStorage.getItem('mobholdMaxLevel');
+                    if (savedMaxLevel) maxLevelReached = parseInt(savedMaxLevel, 10) || 1;
+                    const savedLevelDeaths = localStorage.getItem('mobholdLevelDeaths');
+                    if (savedLevelDeaths) levelDeaths = JSON.parse(savedLevelDeaths);
+                } catch (e) {}
+            }
         } else {
             // Fallback to localStorage in standalone mode
             const savedHighScore = localStorage.getItem('survivalHighScore');
@@ -7179,10 +7192,10 @@ function gameLoop(timestamp) {
 let bridgeReady = false;
 
 function saveData(key, value) {
+    // Always save to localStorage as backup
+    try { localStorage.setItem(key, value); } catch (e) {}
     if (bridgeReady) {
         bridge.storage.set([key], [value]).catch(() => {});
-    } else {
-        try { localStorage.setItem(key, value); } catch (e) {}
     }
 }
 
