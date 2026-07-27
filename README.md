@@ -2,8 +2,13 @@
 
 ![Screen 2](preview.webp)
 
-Survive endless spiky hordes with your maxed-out pixel legion! Cluster, level up, and hold the line.
-A retro pixel-art auto-battler survival game. Command your growing horde of ninjas against waves of monstrous foes. Form tight defensive clusters, upgrade your units, and push the population limit to endure the onslaught!
+## Game Description
+
+A fast-paced survival game where you battle endless waves of monsters and survive as long as possible! Each run gets harder as enemy types multiply and difficulty scales!
+
+## How to Play
+
+Use WASD or arrow keys to move your character. Avoid obstacles, collect power-ups, and survive the onslaught. Kill enemies to earn XP and level up your weapons. Survive as long as possible to get a high score!
 
 
 Tech Stack: HTML5 Canvas + vanilla JavaScript
