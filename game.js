@@ -1447,7 +1447,7 @@ function updateLevelObjective(dt) {
     }
 }
 
-function completeLevel(perfect) {
+async function completeLevel(perfect) {
     if (levelComplete) return;
     levelComplete = true;
 
@@ -1470,12 +1470,12 @@ function completeLevel(perfect) {
         maxLevelReached = currentLevel + 1;
     }
 
-    // Persist to storage
-    saveData('mobholdLevelScores', JSON.stringify(levelHighScores));
-    saveData('mobholdMaxLevel', maxLevelReached.toString());
-
     SFX.levelUp();
     spawnConfetti();
+
+    // Await persistence for this critical save point
+    await saveData('mobholdLevelScores', JSON.stringify(levelHighScores));
+    await saveData('mobholdMaxLevel', maxLevelReached.toString());
 }
 
 function failLevel() {
@@ -1773,10 +1773,12 @@ async function loadGameData() {
                 }
             }
 
+            console.log('loadGameData: Bridge data:', data);
             if (data[0] !== null) highScore = parseInt(data[0], 10) || 0;
             if (data[1] !== null) levelHighScores = JSON.parse(data[1]);
             if (data[2] !== null) maxLevelReached = parseInt(data[2], 10) || 1;
             if (data[3] !== null) levelDeaths = JSON.parse(data[3]);
+            console.log('loadGameData: maxLevelReached =', maxLevelReached, ' | highScore =', highScore);
         }
     } catch (error) {
         console.warn('Failed to load saved data:', error);
@@ -7198,10 +7200,15 @@ let bridgeReady = false;
 
 function saveData(key, value) {
     if (bridgeReady) {
-        bridge.storage.set([key], [value]).catch(err => {
-            console.warn('saveData failed for', key, err);
+        console.log(`saveData: SET key=${key} value=${value}`);
+        return bridge.storage.set([key], [value]).then(() => {
+            console.log(`saveData: OK key=${key}`);
+        }).catch(err => {
+            console.warn(`saveData: FAILED key=${key}`, err);
         });
     }
+    console.warn(`saveData: SKIPPED key=${key} (bridge not ready)`);
+    return Promise.resolve();
 }
 
 async function initBridge() {
