@@ -1,0 +1,23 @@
+{
+    "platforms": {},
+    "advertisement": {
+        "minimumDelayBetweenInterstitial": 0,
+        "interstitial": {
+            "placements": [
+                {
+                    "id": "game_over"
+                }
+            ]
+        },
+        "rewarded": {
+            "placements": [
+                {
+                    "id": "revive"
+                },
+                {
+                    "id": "skip_level"
+                }
+            ]
+        }
+    }
+}

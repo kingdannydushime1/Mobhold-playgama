@@ -1,0 +1,45 @@
+[{
+    "type": "SpiderYellow",
+    "health": 4,
+    "speed": 1.4
+},{
+    "type": "YellowBat",
+    "health": 4,
+    "speed": 1.8
+},
+{
+    "type": "Eye",
+    "health": 17,
+    "speed": 1.5
+},
+{
+    "type": "Beast",
+    "health": 15,
+    "speed": 1.8
+},
+{
+    "type": "Eye2",
+    "health": 27,
+    "speed": 1.9
+},
+{
+    "type": "Beast2",
+    "health": 25,
+    "speed": 2.2
+},
+{
+    "type": "Reptile",
+    "health": 50,
+    "speed": 2.0
+},
+{
+    "type": "Cyclopse",
+    "health": 40,
+    "speed": 1.5
+},
+{
+    "type": "Cyclopse2",
+    "health": 90,
+    "speed": 1.8
+}
+]
