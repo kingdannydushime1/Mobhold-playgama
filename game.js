@@ -1747,29 +1747,13 @@ async function loadGameData() {
             const keys = ['survivalHighScore', 'mobholdLevelScores', 'mobholdMaxLevel', 'mobholdLevelDeaths'];
             let data = await bridge.storage.get(keys);
 
-            // One-time migration from localStorage to Bridge
-            const allNull = data.every(d => d === null);
-            if (allNull) {
-                const lsData = [];
-                for (const key of keys) {
-                    try { lsData.push(localStorage.getItem(key)); } catch (e) { lsData.push(null); }
-                }
-                const hasLsData = lsData.some(v => v !== null);
-                if (hasLsData) {
-                    const migrateKeys = [];
-                    const migrateValues = [];
-                    for (let i = 0; i < keys.length; i++) {
-                        if (lsData[i] !== null) {
-                            migrateKeys.push(keys[i]);
-                            migrateValues.push(lsData[i]);
-                        }
-                    }
-                    await bridge.storage.set(migrateKeys, migrateValues).catch(() => {});
-                    data = await bridge.storage.get(keys);
-                    // Clear localStorage after successful migration
-                    for (const key of keys) {
-                        try { localStorage.removeItem(key); } catch (e) { }
-                    }
+            // Fallback to localStorage if bridge returned nothing
+            if (data.every(d => d === null)) {
+                for (let i = 0; i < keys.length; i++) {
+                    try {
+                        const lsVal = localStorage.getItem(keys[i]);
+                        if (lsVal !== null) data[i] = lsVal;
+                    } catch (e) { }
                 }
             }
 
@@ -7199,6 +7183,7 @@ function gameLoop(timestamp) {
 let bridgeReady = false;
 
 function saveData(key, value) {
+    try { localStorage.setItem(key, value); } catch (e) { }
     if (bridgeReady) {
         console.log(`saveData: SET key=${key} value=${value}`);
         return bridge.storage.set([key], [value]).then(() => {
