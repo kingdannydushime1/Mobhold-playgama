@@ -1747,16 +1747,6 @@ async function loadGameData() {
             const keys = ['survivalHighScore', 'mobholdLevelScores', 'mobholdMaxLevel', 'mobholdLevelDeaths'];
             let data = await bridge.storage.get(keys);
 
-            // Fallback to localStorage if bridge returned nothing
-            if (data.every(d => d === null)) {
-                for (let i = 0; i < keys.length; i++) {
-                    try {
-                        const lsVal = localStorage.getItem(keys[i]);
-                        if (lsVal !== null) data[i] = lsVal;
-                    } catch (e) { }
-                }
-            }
-
             console.log('loadGameData: Bridge data:', data);
             if (data[0] !== null) highScore = parseInt(data[0], 10) || 0;
             if (data[1] !== null) levelHighScores = JSON.parse(data[1]);
@@ -7183,16 +7173,11 @@ function gameLoop(timestamp) {
 let bridgeReady = false;
 
 function saveData(key, value) {
-    try { localStorage.setItem(key, value); } catch (e) { }
     if (bridgeReady) {
-        console.log(`saveData: SET key=${key} value=${value}`);
-        return bridge.storage.set([key], [value]).then(() => {
-            console.log(`saveData: OK key=${key}`);
-        }).catch(err => {
+        return bridge.storage.set([key], [value]).catch(err => {
             console.warn(`saveData: FAILED key=${key}`, err);
         });
     }
-    console.warn(`saveData: SKIPPED key=${key} (bridge not ready)`);
     return Promise.resolve();
 }
 
@@ -7200,6 +7185,9 @@ async function initBridge() {
     try {
         await bridge.initialize();
         bridgeReady = true;
+
+        // Read player language for localization
+        const playerLanguage = bridge.platform.language;
 
         // Audio state events
         bridge.platform.on(bridge.EVENT_NAME.AUDIO_STATE_CHANGED, isEnabled => {
