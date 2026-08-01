@@ -1152,7 +1152,7 @@ function spawnParticleExplosion(x, y, color, count) {
 }
 
 function spawnBloodSplatter(x, y, count) {
-    const colors = ['#cc0000', '#aa0000', '#880000', '#dd2222'];
+    const colors = ['#0044cc', '#002288', '#0033aa', '#0055ee'];
     for (let i = 0; i < count; i++) {
         const angle = Math.random() * Math.PI * 2;
         const speed = 50 + Math.random() * 150;
