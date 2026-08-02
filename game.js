@@ -1152,7 +1152,7 @@ function spawnParticleExplosion(x, y, color, count) {
 }
 
 function spawnBloodSplatter(x, y, count) {
-    const colors = ['#0044cc', '#002288', '#0033aa', '#0055ee'];
+    const colors = ['#00cc44', '#009933', '#00aa3a', '#22ee55'];
     for (let i = 0; i < count; i++) {
         const angle = Math.random() * Math.PI * 2;
         const speed = 50 + Math.random() * 150;
@@ -1178,7 +1178,7 @@ function spawnSparkExplosion(x, y, count) {
             x, y,
             Math.cos(angle) * speed,
             Math.sin(angle) * speed,
-            life, size, '#ffffaa', 50
+            life, size, ['#ff8800', '#ff6600', '#ffaa33', '#ff4400'][Math.floor(Math.random() * 4)], 50
         );
     }
 }
