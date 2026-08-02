@@ -851,158 +851,103 @@ function updateKillStreak(dt) {
 // ============================================
 // BOSS SYSTEM
 // ============================================
-function spawnBoss() {
-    const angle = Math.random() * Math.PI * 2;
-    const spawnDist = 600;
-    const bx = player.x + Math.cos(angle) * spawnDist;
-    const by = player.y + Math.sin(angle) * spawnDist;
-    const hp = Math.floor(BOSS_HEALTH_BASE * Math.pow(BOSS_HEALTH_SCALE, bossDefeatedCount));
+// BOSS ROSTER — 10 unique bosses, each with a distinct look, movement and attack style.
+// Boss for a level is picked by getBossDefForLevel(). Debug keys: ']' = next boss level, '[' = prev.
+const BOSS_DEFS = [
+    {
+        id: 'golem', name: 'TITAN GOLEM',
+        size: 118, speed: 42, chargeSpeed: 300, orbInterval: 2.6, orbSpeed: 170,
+        colors: { body: '#6b6b70', dark: '#333338', accent: '#ff9a00', orb: '#ffaa33' },
+        update: updateBossGolem, draw: drawBossGolem
+    },
+    {
+        id: 'viper', name: 'VIPER QUEEN',
+        size: 104, speed: 72, chargeSpeed: 180, orbInterval: 1.9, orbSpeed: 165,
+        colors: { body: '#3f9e4f', dark: '#1d4f27', accent: '#a8f25a', orb: '#9bff4d' },
+        update: updateBossViper, draw: drawBossViper
+    },
+    {
+        id: 'specter', name: 'VOID SPECTER',
+        size: 92, speed: 58, chargeSpeed: 120, orbInterval: 2.2, orbSpeed: 200,
+        colors: { body: '#8f5bd6', dark: '#3d1f66', accent: '#d7b8ff', orb: '#c78dff' },
+        update: updateBossSpecter, draw: drawBossSpecter
+    },
+    {
+        id: 'warlord', name: 'INFERNO WARLORD',
+        size: 110, speed: 92, chargeSpeed: 320, orbInterval: 2.0, orbSpeed: 175,
+        colors: { body: '#b3312a', dark: '#5a120d', accent: '#ffd23a', orb: '#ff5a20' },
+        update: updateBossWarlord, draw: drawBossWarlord
+    },
+    {
+        id: 'hydra', name: 'IRON HYDRA',
+        size: 128, speed: 48, chargeSpeed: 220, orbInterval: 1.6, orbSpeed: 180,
+        colors: { body: '#4a5a6e', dark: '#232b36', accent: '#6ad86a', orb: '#4dff8a' },
+        update: updateBossHydra, draw: drawBossHydra
+    },
+    {
+        id: 'behemoth', name: 'FROST BEHEMOTH',
+        size: 134, speed: 34, chargeSpeed: 260, orbInterval: 2.8, orbSpeed: 155,
+        colors: { body: '#7fc7e8', dark: '#33586e', accent: '#e8f7ff', orb: '#9beaff' },
+        update: updateBossBehemoth, draw: drawBossBehemoth
+    },
+    {
+        id: 'wyrm', name: 'STORM WYRM',
+        size: 106, speed: 82, chargeSpeed: 340, orbInterval: 1.7, orbSpeed: 220,
+        colors: { body: '#3a63c4', dark: '#1a2f66', accent: '#ffe14d', orb: '#6ab4ff' },
+        update: updateBossWyrm, draw: drawBossWyrm
+    },
+    {
+        id: 'lich', name: 'NECRO LICH',
+        size: 96, speed: 40, chargeSpeed: 140, orbInterval: 2.4, orbSpeed: 150,
+        colors: { body: '#b9b3c2', dark: '#3a3342', accent: '#9bff9b', orb: '#c2f25a' },
+        update: updateBossLich, draw: drawBossLich
+    },
+    {
+        id: 'arachnid', name: 'PLASMA ARACHNID',
+        size: 116, speed: 88, chargeSpeed: 300, orbInterval: 1.4, orbSpeed: 190,
+        colors: { body: '#a14dd6', dark: '#3c1b52', accent: '#6af2ff', orb: '#e04dff' },
+        update: updateBossArachnid, draw: drawBossArachnid
+    },
+    {
+        id: 'tyrant', name: 'SOLAR TYRANT',
+        size: 124, speed: 55, chargeSpeed: 200, orbInterval: 2.2, orbSpeed: 130,
+        colors: { body: '#ffb520', dark: '#8a5400', accent: '#fff3b0', orb: '#ffd75a' },
+        update: updateBossTyrant, draw: drawBossTyrant
+    }
+];
 
-    boss = {
-        x: bx,
-        y: by,
-        health: hp,
-        maxHealth: hp,
-        phase: 'entering',       // entering → chasing → charging → shooting
-        phaseTimer: 2.0,
-        attackTimer: BOSS_ORB_INTERVAL,
-        chargeTimer: 0,
-        chargeDirX: 0,
-        chargeDirY: 0,
-        flashTimer: 0,
-        size: BOSS_SIZE,
-        hitCooldowns: {}
-    };
-    bossActive = true;
-    bossWarning = false;
-
-    // Big entrance shake
-    triggerShake(12, 0.5);
+function getBossDefForLevel(levelNum) {
+    const idx = ((Math.floor(levelNum / 10) - 1) % BOSS_DEFS.length + BOSS_DEFS.length) % BOSS_DEFS.length;
+    return BOSS_DEFS[idx];
 }
 
-function updateBoss(dt) {
-    if (!bossActive || !boss) return;
+function fireBossOrb(angle, speed, lifetime) {
+    bossOrbs.push({
+        x: boss.x,
+        y: boss.y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        lifetime: lifetime || 4.0,
+        color: boss.def.colors.orb
+    });
+}
 
-    // Boss flash on hit
-    if (boss.flashTimer > 0) {
-        boss.flashTimer -= dt;
+function bossContactDamage(radiusMult) {
+    const dx = player.x - boss.x;
+    const dy = player.y - boss.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < boss.size * (radiusMult || 0.4) + SCALED_TILE * 0.4) {
+        damagePlayer();
     }
+}
 
-    // Phase machine
-    switch (boss.phase) {
-        case 'entering':
-            boss.phaseTimer -= dt;
-            // Drift toward player slowly
-            const edx = player.x - boss.x;
-            const edy = player.y - boss.y;
-            const eDist = Math.sqrt(edx * edx + edy * edy);
-            if (eDist > 0) {
-                boss.x += (edx / eDist) * BOSS_SPEED * 0.5 * dt;
-                boss.y += (edy / eDist) * BOSS_SPEED * 0.5 * dt;
-            }
-            if (boss.phaseTimer <= 0) {
-                boss.phase = 'chasing';
-            }
-            break;
-
-        case 'chasing':
-            // Move toward player
-            const cdx = player.x - boss.x;
-            const cdy = player.y - boss.y;
-            const cDist = Math.sqrt(cdx * cdx + cdy * cdy);
-            if (cDist > 0) {
-                boss.x += (cdx / cDist) * BOSS_SPEED * dt;
-                boss.y += (cdy / cDist) * BOSS_SPEED * dt;
-            }
-
-            // Attack timer
-            boss.attackTimer -= dt;
-            if (boss.attackTimer <= 0) {
-                // 50% chance charge, 50% chance orbs
-                if (Math.random() < 0.5) {
-                    boss.phase = 'charging';
-                    boss.chargeTimer = 0.8; // wind-up
-                    boss.chargeDirX = cdx / cDist;
-                    boss.chargeDirY = cdy / cDist;
-                    boss.flashTimer = 0.8;
-                } else {
-                    boss.phase = 'shooting';
-                    boss.phaseTimer = 1.5;
-                    boss.flashTimer = 0.3;
-                }
-                boss.attackTimer = BOSS_ORB_INTERVAL;
-            }
-
-            // Player collision
-            const pDx = player.x - boss.x;
-            const pDy = player.y - boss.y;
-            const pDist = Math.sqrt(pDx * pDx + pDy * pDy);
-            if (pDist < boss.size * 0.4 + SCALED_TILE * 0.4) {
-                damagePlayer();
-            }
-            break;
-
-        case 'charging':
-            boss.chargeTimer -= dt;
-            if (boss.chargeTimer <= 0) {
-                // LUNGE!
-                boss.phase = 'lunging';
-                boss.phaseTimer = BOSS_CHARGE_DURATION;
-                triggerShake(6, 0.3);
-                SFX.bomb();
-            }
-            break;
-
-        case 'lunging':
-            boss.phaseTimer -= dt;
-            boss.x += boss.chargeDirX * BOSS_CHARGE_SPEED * dt;
-            boss.y += boss.chargeDirY * BOSS_CHARGE_SPEED * dt;
-
-            // Player collision during charge
-            const ldx = player.x - boss.x;
-            const ldy = player.y - boss.y;
-            const lDist = Math.sqrt(ldx * ldx + ldy * ldy);
-            if (lDist < boss.size * 0.5 + SCALED_TILE * 0.4) {
-                damagePlayer();
-            }
-
-            if (boss.phaseTimer <= 0) {
-                boss.phase = 'chasing';
-                boss.attackTimer = BOSS_ORB_INTERVAL * 0.5;
-            }
-            break;
-
-        case 'shooting':
-            boss.phaseTimer -= dt;
-            // Fire orbs in 8 directions
-            if (boss.phaseTimer > 1.2) {
-                // Fire burst
-                for (let i = 0; i < 8; i++) {
-                    const orbAngle = (Math.PI * 2 / 8) * i;
-                    bossOrbs.push({
-                        x: boss.x,
-                        y: boss.y,
-                        vx: Math.cos(orbAngle) * BOSS_ORB_SPEED,
-                        vy: Math.sin(orbAngle) * BOSS_ORB_SPEED,
-                        lifetime: 4.0
-                    });
-                }
-                SFX.kunai();
-            }
-            if (boss.phaseTimer <= 0) {
-                boss.phase = 'chasing';
-            }
-            break;
-    }
-
-    // Update boss orbs
+function updateBossOrbsShared(dt) {
     for (let i = bossOrbs.length - 1; i >= 0; i--) {
         const orb = bossOrbs[i];
         orb.x += orb.vx * dt;
         orb.y += orb.vy * dt;
         orb.lifetime -= dt;
 
-        // Player collision
         const odx = player.x - orb.x;
         const ody = player.y - orb.y;
         const oDist = Math.sqrt(odx * odx + ody * ody);
@@ -1011,11 +956,383 @@ function updateBoss(dt) {
             bossOrbs.splice(i, 1);
             continue;
         }
-
         if (orb.lifetime <= 0) {
             bossOrbs.splice(i, 1);
         }
     }
+}
+
+function spawnBoss() {
+    const def = getBossDefForLevel(currentLevel);
+    const angle = Math.random() * Math.PI * 2;
+    const spawnDist = 600;
+    const bx = player.x + Math.cos(angle) * spawnDist;
+    const by = player.y + Math.sin(angle) * spawnDist;
+    const hp = (levelData && levelData.hasBoss && levelData.bossHP > 0)
+        ? levelData.bossHP
+        : Math.floor(BOSS_HEALTH_BASE * Math.pow(BOSS_HEALTH_SCALE, bossDefeatedCount));
+
+    boss = {
+        def: def,
+        x: bx,
+        y: by,
+        health: hp,
+        maxHealth: hp,
+        phase: 'entering',
+        phaseTimer: 1.8,
+        attackTimer: def.orbInterval,
+        chargeTimer: 0,
+        chargeDirX: 0,
+        chargeDirY: 0,
+        strafeDir: Math.random() < 0.5 ? 1 : -1,
+        flashTimer: 0,
+        size: def.size,
+        speed: def.speed,
+        timer: 0,
+        hitCooldowns: {}
+    };
+    bossActive = true;
+    bossWarning = false;
+
+    triggerShake(12, 0.5);
+}
+
+function updateBoss(dt) {
+    if (!bossActive || !boss) return;
+
+    if (boss.flashTimer > 0) {
+        boss.flashTimer -= dt;
+    }
+
+    // Entrance drift
+    if (boss.phase === 'entering') {
+        boss.phaseTimer -= dt;
+        const edx = player.x - boss.x;
+        const edy = player.y - boss.y;
+        const eDist = Math.sqrt(edx * edx + edy * edy);
+        if (eDist > 0) {
+            boss.x += (edx / eDist) * boss.speed * 0.5 * dt;
+            boss.y += (edy / eDist) * boss.speed * 0.5 * dt;
+        }
+        if (boss.phaseTimer <= 0) {
+            boss.phase = 'fighting';
+            boss.timer = 0;
+        }
+        return;
+    }
+
+    // Dispatch to the boss-specific AI
+    boss.timer += dt;
+    if (boss.def.update) {
+        boss.def.update(dt);
+    }
+
+    // Shared orb physics
+    updateBossOrbsShared(dt);
+}
+
+// --- BOSS #1: TITAN GOLEM — slow heavyweight that telegraphs and lunges ---
+function updateBossGolem(dt) {
+    const dx = player.x - boss.x;
+    const dy = player.y - boss.y;
+    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+
+    switch (boss.phase) {
+        case 'fighting':
+            boss.x += (dx / dist) * boss.speed * 0.6 * dt;
+            boss.y += (dy / dist) * boss.speed * 0.6 * dt;
+            boss.attackTimer -= dt;
+            if (boss.attackTimer <= 0) {
+                boss.phase = 'charging';
+                boss.chargeTimer = 1.1;
+                boss.chargeDirX = dx / dist;
+                boss.chargeDirY = dy / dist;
+            }
+            break;
+        case 'charging':
+            boss.chargeTimer -= dt;
+            bossContactDamage(0.45);
+            if (boss.chargeTimer <= 0) {
+                boss.phase = 'lunging';
+                boss.phaseTimer = 0.9;
+                triggerShake(7, 0.35);
+                SFX.bomb();
+            }
+            break;
+        case 'lunging':
+            boss.phaseTimer -= dt;
+            boss.x += boss.chargeDirX * boss.def.chargeSpeed * dt;
+            boss.y += boss.chargeDirY * boss.def.chargeSpeed * dt;
+            bossContactDamage(0.5);
+            if (boss.phaseTimer <= 0) {
+                boss.phase = 'fighting';
+                boss.attackTimer = boss.def.orbInterval;
+                boss.phase = 'slamming';
+                boss.phaseTimer = 0.4;
+            }
+            break;
+        case 'slamming':
+            boss.phaseTimer -= dt;
+            if (boss.phaseTimer <= 0) {
+                // Ground slam: radial stone shards
+                for (let i = 0; i < 10; i++) {
+                    const a = (Math.PI * 2 / 10) * i + Math.random() * 0.3;
+                    fireBossOrb(a, boss.def.orbSpeed, 2.5);
+                }
+                triggerShake(10, 0.4);
+                SFX.bomb();
+                boss.phase = 'fighting';
+                boss.attackTimer = boss.def.orbInterval;
+            }
+            break;
+    }
+    bossContactDamage(0.4);
+}
+
+// --- BOSS #2: VIPER QUEEN — slithers in sine waves, spits venom fans ---
+function updateBossViper(dt) {
+    const dx = player.x - boss.x;
+    const dy = player.y - boss.y;
+    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+
+    // Slither: move toward player with perpendicular sine oscillation
+    const nx = -dy / dist;
+    const ny = dx / dist;
+    const wobble = Math.sin(boss.timer * 5) * 1.3;
+    boss.x += ((dx / dist) * 0.7 + nx * wobble) * boss.speed * dt;
+    boss.y += ((dy / dist) * 0.7 + ny * wobble) * boss.speed * dt;
+
+    boss.attackTimer -= dt;
+    if (boss.attackTimer <= 0) {
+        // Venom fan: 5-shot spread aimed at player
+        const baseAngle = Math.atan2(dy, dx);
+        for (let i = -2; i <= 2; i++) {
+            fireBossOrb(baseAngle + i * 0.22, boss.def.orbSpeed, 3.0);
+        }
+        SFX.kunai();
+        boss.attackTimer = boss.def.orbInterval;
+    }
+    bossContactDamage(0.38);
+}
+
+// --- BOSS #3: VOID SPECTER — blinks around the arena, fires orbs on arrival ---
+function updateBossSpecter(dt) {
+    const dx = player.x - boss.x;
+    const dy = player.y - boss.y;
+    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+
+    if (boss.phase === 'blinking') {
+        boss.phaseTimer -= dt;
+        if (boss.phaseTimer <= 0) {
+            // Teleport to a point at 300px around the player
+            const a = Math.random() * Math.PI * 2;
+            boss.x = player.x + Math.cos(a) * 300;
+            boss.y = player.y + Math.sin(a) * 300;
+            for (let i = 0; i < 12; i++) {
+                const oa = (Math.PI * 2 / 12) * i;
+                fireBossOrb(oa, boss.def.orbSpeed * 0.7, 3.0);
+            }
+            triggerShake(4, 0.2);
+            boss.phase = 'fighting';
+            boss.attackTimer = 1.2;
+        }
+        return;
+    }
+
+    boss.x += (dx / dist) * boss.speed * 0.5 * dt;
+    boss.y += (dy / dist) * boss.speed * 0.5 * dt;
+    boss.attackTimer -= dt;
+    if (boss.attackTimer <= 0) {
+        boss.phase = 'blinking';
+        boss.phaseTimer = 0.9;
+        boss.flashTimer = 0.9;
+    }
+    bossContactDamage(0.35);
+}
+
+// --- BOSS #4: INFERNO WARLORD — fast chaser, radial fire bursts ---
+function updateBossWarlord(dt) {
+    const dx = player.x - boss.x;
+    const dy = player.y - boss.y;
+    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+
+    boss.x += (dx / dist) * boss.speed * dt;
+    boss.y += (dy / dist) * boss.speed * dt;
+
+    boss.attackTimer -= dt;
+    if (boss.attackTimer <= 0) {
+        for (let i = 0; i < 8; i++) {
+            const a = (Math.PI * 2 / 8) * i + Math.random() * 0.4;
+            fireBossOrb(a, boss.def.orbSpeed, 3.5);
+        }
+        SFX.bomb();
+        boss.attackTimer = boss.def.orbInterval;
+    }
+    bossContactDamage(0.42);
+}
+
+// --- BOSS #5: IRON HYDRA — strafes, three heads fire aimed shots ---
+function updateBossHydra(dt) {
+    const dx = player.x - boss.x;
+    const dy = player.y - boss.y;
+    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+    const nx = -dy / dist;
+    const ny = dx / dist;
+
+    // Strafe sideways around player, drift closer
+    const strafe = Math.sin(boss.timer * 1.2) * 1.5;
+    boss.x += ((dx / dist) * 0.5 + nx * strafe) * boss.speed * dt;
+    boss.y += ((dy / dist) * 0.5 + ny * strafe) * boss.speed * dt;
+
+    boss.attackTimer -= dt;
+    if (boss.attackTimer <= 0) {
+        const baseAngle = Math.atan2(dy, dx);
+        // Three heads, three slightly different angles
+        for (let h = -1; h <= 1; h++) {
+            for (let i = -1; i <= 1; i++) {
+                fireBossOrb(baseAngle + h * 0.35 + i * 0.14, boss.def.orbSpeed, 3.0);
+            }
+        }
+        SFX.kunai();
+        boss.attackTimer = boss.def.orbInterval;
+    }
+    bossContactDamage(0.42);
+}
+
+// --- BOSS #6: FROST BEHEMOTH — slow, heavy, sprays ice cones ---
+function updateBossBehemoth(dt) {
+    const dx = player.x - boss.x;
+    const dy = player.y - boss.y;
+    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+
+    boss.x += (dx / dist) * boss.speed * dt;
+    boss.y += (dy / dist) * boss.speed * dt;
+
+    boss.attackTimer -= dt;
+    if (boss.attackTimer <= 0) {
+        const baseAngle = Math.atan2(dy, dx);
+        for (let i = -3; i <= 3; i++) {
+            fireBossOrb(baseAngle + i * 0.18, boss.def.orbSpeed * 0.9, 3.0);
+        }
+        triggerShake(6, 0.3);
+        SFX.bomb();
+        boss.attackTimer = boss.def.orbInterval;
+    }
+    bossContactDamage(0.46);
+}
+
+// --- BOSS #7: STORM WYRM — circles the player, arcs of lightning ---
+function updateBossWyrm(dt) {
+    const dx = player.x - boss.x;
+    const dy = player.y - boss.y;
+    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+
+    // Orbit at ~260px radius
+    const orbitAngle = Math.atan2(dy, dx) + 2.2 * dt;
+    const targetX = player.x + Math.cos(orbitAngle) * 260;
+    const targetY = player.y + Math.sin(orbitAngle) * 260;
+    const tdx = targetX - boss.x;
+    const tdy = targetY - boss.y;
+    const tDist = Math.sqrt(tdx * tdx + tdy * tdy) || 1;
+    boss.x += (tdx / tDist) * boss.speed * dt;
+    boss.y += (tdy / tDist) * boss.speed * dt;
+
+    boss.attackTimer -= dt;
+    if (boss.attackTimer <= 0) {
+        const baseAngle = Math.atan2(dy, dx);
+        for (let i = 0; i < 3; i++) {
+            const jitter = (i - 1) * 0.18 + (Math.random() - 0.5) * 0.3;
+            fireBossOrb(baseAngle + jitter, boss.def.orbSpeed * 1.3, 2.2);
+        }
+        SFX.kunai();
+        boss.attackTimer = boss.def.orbInterval;
+    }
+    bossContactDamage(0.4);
+}
+
+// --- BOSS #8: NECRO LICH — keeps distance, fires slow aimed bones ---
+function updateBossLich(dt) {
+    const dx = player.x - boss.x;
+    const dy = player.y - boss.y;
+    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+
+    // Keep distance: flee if too close, approach if too far
+    const targetDist = 340;
+    const diff = dist - targetDist;
+    const move = Math.max(-1, Math.min(1, diff * 0.004));
+    boss.x += (dx / dist) * move * boss.speed * dt;
+    boss.y += (dy / dist) * move * boss.speed * dt;
+
+    boss.attackTimer -= dt;
+    if (boss.attackTimer <= 0) {
+        const baseAngle = Math.atan2(dy, dx);
+        for (let i = -1; i <= 1; i++) {
+            fireBossOrb(baseAngle + i * 0.2, boss.def.orbSpeed * 0.7, 4.0);
+        }
+        // Occasional teleport away
+        if (Math.random() < 0.35) {
+            boss.x = player.x + Math.cos(Math.random() * Math.PI * 2) * 420;
+            boss.y = player.y + Math.sin(Math.random() * Math.PI * 2) * 420;
+            boss.flashTimer = 0.4;
+        }
+        SFX.kunai();
+        boss.attackTimer = boss.def.orbInterval;
+    }
+    bossContactDamage(0.36);
+}
+
+// --- BOSS #9: PLASMA ARACHNID — zigzags fast, spams spread plasma ---
+function updateBossArachnid(dt) {
+    const dx = player.x - boss.x;
+    const dy = player.y - boss.y;
+    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+    const nx = -dy / dist;
+    const ny = dx / dist;
+
+    // Fast zigzag strafe + drift
+    const zig = Math.sin(boss.timer * 6) * 2.2;
+    boss.x += ((dx / dist) * 0.4 + nx * zig) * boss.speed * dt;
+    boss.y += ((dy / dist) * 0.4 + ny * zig) * boss.speed * dt;
+
+    boss.attackTimer -= dt;
+    if (boss.attackTimer <= 0) {
+        const baseAngle = Math.atan2(dy, dx);
+        for (let i = -2; i <= 2; i++) {
+            fireBossOrb(baseAngle + i * 0.16, boss.def.orbSpeed * 1.1, 2.8);
+        }
+        SFX.kunai();
+        boss.attackTimer = boss.def.orbInterval;
+    }
+    bossContactDamage(0.4);
+}
+
+// --- BOSS #10: SOLAR TYRANT — hovers at range, fires rotating sunbursts ---
+function updateBossTyrant(dt) {
+    const dx = player.x - boss.x;
+    const dy = player.y - boss.y;
+    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+
+    // Orbit at ~330px, slowly descending on player
+    const orbitAngle = Math.atan2(dy, dx) + 1.1 * dt;
+    const targetX = player.x + Math.cos(orbitAngle) * 330;
+    const targetY = player.y + Math.sin(orbitAngle) * 330;
+    const tdx = targetX - boss.x;
+    const tdy = targetY - boss.y;
+    const tDist = Math.sqrt(tdx * tdx + tdy * tdy) || 1;
+    boss.x += (tdx / tDist) * boss.speed * dt;
+    boss.y += (tdy / tDist) * boss.speed * dt;
+
+    boss.attackTimer -= dt;
+    if (boss.attackTimer <= 0) {
+        const offset = boss.timer * 0.7;
+        for (let i = 0; i < 12; i++) {
+            const a = (Math.PI * 2 / 12) * i + offset;
+            fireBossOrb(a, boss.def.orbSpeed * 0.85, 3.2);
+        }
+        SFX.bomb();
+        boss.attackTimer = boss.def.orbInterval;
+    }
+    bossContactDamage(0.42);
 }
 
 function damageBoss(amount) {
@@ -1308,6 +1625,11 @@ function generateLevelConfig(levelNum) {
         }
     }
 
+    // Boss levels are always boss duels
+    if (isBossLevel) {
+        selectedObj = { type: 'boss_kill' };
+    }
+
     // === OBJECTIVE TARGET ===
     let target = 0;
     switch (selectedObj.type) {
@@ -1404,6 +1726,26 @@ function startLevel(levelNum) {
     if (levelData.modifiers.includes('swarm')) {
         currentSpawnInterval = Math.floor(currentSpawnInterval * 0.5);
     }
+
+    // Boss levels: boss duel only
+    if (levelData.hasBoss) {
+        giveBossLoadout(currentLevel);
+        playerLives = MAX_LIVES;
+        bossTimer = BOSS_INTERVAL; // trigger warning immediately
+    }
+}
+
+// Give the player equipment adapted to the boss level's power
+function giveBossLoadout(levelNum) {
+    const weaponLevel = Math.max(0, Math.min(6, Math.floor(levelNum / 25)));
+    playerWeapons = [
+        { type: 'Arrow', level: weaponLevel, cooldownTimer: 0 },
+        { type: 'Shuriken', level: weaponLevel, cooldownTimer: 0 },
+        { type: 'Kunai', level: weaponLevel, cooldownTimer: 0 },
+        { type: 'Bomb', level: weaponLevel, cooldownTimer: 0 },
+        { type: 'Circlet', level: weaponLevel, cooldownTimer: 0 }
+    ];
+    updateCirclets();
 }
 
 function updateLevelObjective(dt) {
@@ -4801,7 +5143,13 @@ function getObjectiveText() {
         case 'survive_no_damage': return `No hit ${objectiveProgress}/${obj.target}s`;
         case 'reach_score': return `Score ${objectiveProgress}/${obj.target} pts`;
         case 'combo_kill': return `Combo ${objectiveProgress}/${obj.target}x`;
-        case 'boss_kill': return `Defeat the boss`;
+        case 'boss_kill': {
+            if (boss) {
+                return `Defeat ${boss.def.name}`;
+            }
+            const bossDef = levelData && levelData.hasBoss ? getBossDefForLevel(currentLevel) : null;
+            return bossDef ? `Defeat ${bossDef.name}` : `Defeat the boss`;
+        }
         default: return '';
     }
 }
@@ -6669,65 +7017,21 @@ function drawBoss() {
     ctx.save();
     ctx.translate(screenX, screenY);
 
-    // Outer glow (red/orange)
+    // Outer glow (boss-specific color)
     ctx.globalCompositeOperation = 'lighter';
     const glowSize = boss.size * 1.5;
     const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, glowSize);
-    glow.addColorStop(0, 'rgba(255, 80, 0, 0.3)');
-    glow.addColorStop(0.5, 'rgba(255, 40, 0, 0.1)');
-    glow.addColorStop(1, 'rgba(255, 0, 0, 0)');
+    const gc = boss.def.colors.orb;
+    glow.addColorStop(0, hexToRgba(gc, 0.35));
+    glow.addColorStop(0.5, hexToRgba(gc, 0.12));
+    glow.addColorStop(1, hexToRgba(gc, 0));
     ctx.fillStyle = glow;
     ctx.fillRect(-glowSize, -glowSize, glowSize * 2, glowSize * 2);
     ctx.globalCompositeOperation = 'source-over';
 
-    // Boss body (dark with red accents)
-    const bodyColor = boss.flashTimer > 0 ? '#ffffff' : '#331111';
-    ctx.fillStyle = bodyColor;
-    ctx.beginPath();
-    ctx.arc(0, 0, halfSize, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Inner red ring
-    ctx.strokeStyle = boss.flashTimer > 0 ? '#ffffff' : '#cc2200';
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.arc(0, 0, halfSize * 0.7, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // Evil eyes
-    ctx.fillStyle = boss.flashTimer > 0 ? '#ffffff' : '#ff0000';
-    ctx.shadowColor = '#ff0000';
-    ctx.shadowBlur = 15;
-    ctx.beginPath();
-    ctx.arc(-halfSize * 0.25, -halfSize * 0.15, halfSize * 0.12, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(halfSize * 0.25, -halfSize * 0.15, halfSize * 0.12, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-
-    // Crown/horns
-    ctx.fillStyle = boss.flashTimer > 0 ? '#ffffff' : '#550000';
-    ctx.beginPath();
-    ctx.moveTo(-halfSize * 0.5, -halfSize * 0.7);
-    ctx.lineTo(-halfSize * 0.3, -halfSize * 1.2);
-    ctx.lineTo(-halfSize * 0.1, -halfSize * 0.7);
-    ctx.closePath();
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(halfSize * 0.1, -halfSize * 0.7);
-    ctx.lineTo(halfSize * 0.3, -halfSize * 1.2);
-    ctx.lineTo(halfSize * 0.5, -halfSize * 0.7);
-    ctx.closePath();
-    ctx.fill();
-
-    // Charge warning
-    if (boss.phase === 'charging' && boss.chargeTimer > 0) {
-        const warnAlpha = 0.3 + Math.sin(boss.chargeTimer * 20) * 0.3;
-        ctx.fillStyle = `rgba(255, 0, 0, ${warnAlpha})`;
-        ctx.beginPath();
-        ctx.arc(0, 0, halfSize * 1.3, 0, Math.PI * 2);
-        ctx.fill();
+    // Dispatch to the boss-specific appearance
+    if (boss.def.draw) {
+        boss.def.draw(ctx, boss, halfSize);
     }
 
     ctx.restore();
@@ -6736,13 +7040,680 @@ function drawBoss() {
     drawBossHealthBar();
 }
 
+// Simple #rrggbb -> rgba() helper
+function hexToRgba(hex, alpha) {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+// Flash helper: returns white when boss was hit recently
+function bossFlashColor(boss, normal) {
+    return boss.flashTimer > 0 ? '#ffffff' : normal;
+}
+
+// ============================================
+// BOSS APPEARANCES (procedural, distinct)
+// ============================================
+
+// #1 TITAN GOLEM — towering stone titan with glowing molten cracks
+function drawBossGolem(ctx, boss, h) {
+    const c = boss.def.colors;
+    const flash = boss.flashTimer > 0;
+    const bob = Math.sin(boss.timer * 2) * h * 0.02;
+
+    // Legs
+    ctx.fillStyle = bossFlashColor(boss, c.dark);
+    ctx.fillRect(-h * 0.55, h * 0.35 + bob, h * 0.25, h * 0.55);
+    ctx.fillRect(h * 0.3, h * 0.35 + bob, h * 0.25, h * 0.55);
+    // Feet
+    ctx.fillStyle = bossFlashColor(boss, c.dark);
+    ctx.fillRect(-h * 0.7, h * 0.85 + bob, h * 0.45, h * 0.15);
+    ctx.fillRect(h * 0.25, h * 0.85 + bob, h * 0.45, h * 0.15);
+
+    // Torso — irregular rock polygon
+    ctx.fillStyle = flash ? '#ffffff' : c.body;
+    ctx.beginPath();
+    ctx.moveTo(-h * 0.85, -h * 0.2);
+    ctx.lineTo(-h * 0.55, -h * 1.05);
+    ctx.lineTo(h * 0.1, -h * 1.25);
+    ctx.lineTo(h * 0.75, -h * 0.85);
+    ctx.lineTo(h * 0.9, -h * 0.15);
+    ctx.lineTo(h * 0.6, h * 0.35);
+    ctx.lineTo(-h * 0.65, h * 0.4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    // Molten cracks (glowing accent)
+    ctx.strokeStyle = flash ? '#ffffff' : c.accent;
+    ctx.lineWidth = 3;
+    ctx.shadowColor = c.accent;
+    ctx.shadowBlur = 12;
+    ctx.beginPath();
+    ctx.moveTo(-h * 0.3, h * 0.3);
+    ctx.lineTo(-h * 0.2, 0);
+    ctx.lineTo(-h * 0.45, -h * 0.4);
+    ctx.moveTo(h * 0.15, h * 0.35);
+    ctx.lineTo(h * 0.25, -h * 0.1);
+    ctx.lineTo(h * 0.5, -h * 0.35);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Head
+    ctx.fillStyle = flash ? '#ffffff' : c.body;
+    ctx.fillRect(-h * 0.45, -h * 1.45, h * 0.9, h * 0.5);
+    // Eyes
+    ctx.fillStyle = flash ? '#ffffff' : c.accent;
+    ctx.shadowColor = c.accent;
+    ctx.shadowBlur = 10;
+    ctx.fillRect(-h * 0.3, -h * 1.35, h * 0.12, h * 0.08);
+    ctx.fillRect(h * 0.12, -h * 1.35, h * 0.12, h * 0.08);
+    ctx.shadowBlur = 0;
+
+    // Charge warning ring
+    if (boss.phase === 'charging') {
+        const warnAlpha = 0.25 + Math.sin(boss.chargeTimer * 18) * 0.2;
+        ctx.strokeStyle = `rgba(255, 60, 0, ${warnAlpha})`;
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.arc(0, 0, h * 1.35, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+}
+
+// #2 VIPER QUEEN — coiled serpent with a hood and fangs
+function drawBossViper(ctx, boss, h) {
+    const c = boss.def.colors;
+    const flash = boss.flashTimer > 0;
+    const sway = Math.sin(boss.timer * 5) * 0.12;
+
+    // Coiled tail rings
+    for (let i = 0; i < 5; i++) {
+        const ringScale = 0.85 - i * 0.13;
+        const ry = h * 0.15 + i * h * 0.18;
+        ctx.fillStyle = i % 2 ? bossFlashColor(boss, c.body) : bossFlashColor(boss, c.dark);
+        ctx.beginPath();
+        ctx.ellipse(0, ry, h * ringScale, h * ringScale * 0.55, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    }
+
+    // Hood (cobra spread)
+    ctx.fillStyle = flash ? '#ffffff' : c.accent;
+    ctx.beginPath();
+    ctx.moveTo(-h * 0.9, -h * 0.7);
+    ctx.quadraticCurveTo(-h * 0.5, -h * 1.6, 0, -h * 1.5);
+    ctx.quadraticCurveTo(h * 0.5, -h * 1.6, h * 0.9, -h * 0.7);
+    ctx.closePath();
+    ctx.fill();
+    // Hood markings
+    ctx.fillStyle = flash ? '#ffffff' : c.dark;
+    for (let i = -2; i <= 2; i++) {
+        ctx.beginPath();
+        ctx.arc(i * h * 0.2, -h * 1.0 + Math.abs(i) * h * 0.05, h * 0.07, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Snake head
+    ctx.fillStyle = flash ? '#ffffff' : c.body;
+    ctx.beginPath();
+    ctx.ellipse(sway * h, -h * 1.7, h * 0.4, h * 0.28, sway, 0, Math.PI * 2);
+    ctx.fill();
+    // Eyes (slit)
+    ctx.fillStyle = flash ? '#ffffff' : c.accent;
+    ctx.shadowColor = c.accent;
+    ctx.shadowBlur = 8;
+    ctx.fillRect(-h * 0.28 + sway * h, -h * 1.78, h * 0.09, h * 0.14);
+    ctx.fillRect(h * 0.14 + sway * h, -h * 1.78, h * 0.09, h * 0.14);
+    ctx.shadowBlur = 0;
+    // Forked tongue
+    ctx.strokeStyle = '#ff4d6d';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, -h * 1.45);
+    ctx.lineTo(sway * h * 0.6, -h * 2.0);
+    ctx.moveTo(sway * h * 0.6, -h * 2.0);
+    ctx.lineTo(sway * h * 0.35, -h * 2.15);
+    ctx.moveTo(sway * h * 0.6, -h * 2.0);
+    ctx.lineTo(sway * h * 0.85, -h * 2.12);
+    ctx.stroke();
+}
+
+// #3 VOID SPECTER — haunting translucent wraith with trailing wisps
+function drawBossSpecter(ctx, boss, h) {
+    const c = boss.def.colors;
+    const flash = boss.flashTimer > 0;
+    const ghostAlpha = boss.phase === 'blinking' ? 0.15 + Math.sin(boss.phaseTimer * 15) * 0.1 : 0.85;
+
+    // Trailing wisps
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 3; i++) {
+        const wA = hexToRgba(c.body, (0.25 - i * 0.06) * ghostAlpha);
+        ctx.fillStyle = wA;
+        ctx.beginPath();
+        ctx.ellipse(-i * h * 0.35, i * h * 0.45 + Math.sin(boss.timer * 4 + i) * h * 0.08, h * (0.5 - i * 0.1), h * (0.3 - i * 0.06), 0, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+
+    // Ghost body (teardrop)
+    ctx.fillStyle = hexToRgba(flash ? '#ffffff' : c.body, ghostAlpha);
+    ctx.beginPath();
+    ctx.moveTo(0, -h * 1.3);
+    ctx.bezierCurveTo(h * 0.9, -h * 0.6, h * 0.7, h * 0.6, 0, h * 1.1);
+    ctx.bezierCurveTo(-h * 0.7, h * 0.6, -h * 0.9, -h * 0.6, 0, -h * 1.3);
+    ctx.fill();
+
+    // Wavy bottom
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.beginPath();
+    for (let i = 0; i <= 6; i++) {
+        const x = -h * 0.65 + i * h * 0.22;
+        const y = h * 0.95 + Math.sin(boss.timer * 6 + i) * h * 0.08;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+    }
+    ctx.lineTo(h * 0.65, h * 1.1);
+    ctx.lineTo(-h * 0.65, h * 1.1);
+    ctx.fill();
+
+    // Hollow eyes and mouth
+    ctx.fillStyle = flash ? '#ffffff' : c.dark;
+    ctx.beginPath();
+    ctx.ellipse(-h * 0.28, -h * 0.35, h * 0.13, h * 0.2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(h * 0.28, -h * 0.35, h * 0.13, h * 0.2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Haunted mouth
+    ctx.beginPath();
+    ctx.ellipse(0, h * 0.15, h * 0.2, h * 0.32, 0, 0, Math.PI);
+    ctx.fill();
+    // Inner glow
+    ctx.fillStyle = hexToRgba(c.orb, 0.6);
+    ctx.beginPath();
+    ctx.ellipse(0, h * 0.15, h * 0.12, h * 0.2, 0, 0, Math.PI);
+    ctx.fill();
+}
+
+// #4 INFERNO WARLORD — horned demon with flaming wings
+function drawBossWarlord(ctx, boss, h) {
+    const c = boss.def.colors;
+    const flash = boss.flashTimer > 0;
+    const flap = Math.sin(boss.timer * 8) * 0.2;
+
+    // Flaming wings
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = hexToRgba('#ff6a20', 0.5);
+    ctx.beginPath();
+    ctx.moveTo(-h * 0.2, -h * 0.2);
+    ctx.quadraticCurveTo(-h * 1.5, -h * 0.4 + flap * h * 2, -h * 1.1, h * 0.5);
+    ctx.quadraticCurveTo(-h * 0.7, h * 0.3, -h * 0.3, h * 0.6);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(h * 0.2, -h * 0.2);
+    ctx.quadraticCurveTo(h * 1.5, -h * 0.4 + flap * h * 2, h * 1.1, h * 0.5);
+    ctx.quadraticCurveTo(h * 0.7, h * 0.3, h * 0.3, h * 0.6);
+    ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+
+    // Muscular torso
+    ctx.fillStyle = flash ? '#ffffff' : c.body;
+    ctx.beginPath();
+    ctx.moveTo(0, -h * 1.25);
+    ctx.bezierCurveTo(h * 0.8, -h * 0.9, h * 0.75, h * 0.45, 0, h * 0.7);
+    ctx.bezierCurveTo(-h * 0.75, h * 0.45, -h * 0.8, -h * 0.9, 0, -h * 1.25);
+    ctx.fill();
+
+    // Chest plate
+    ctx.fillStyle = flash ? '#ffffff' : c.dark;
+    ctx.beginPath();
+    ctx.moveTo(0, -h * 0.5);
+    ctx.quadraticCurveTo(h * 0.4, -h * 0.2, h * 0.3, h * 0.3);
+    ctx.lineTo(-h * 0.3, h * 0.3);
+    ctx.quadraticCurveTo(-h * 0.4, -h * 0.2, 0, -h * 0.5);
+    ctx.fill();
+
+    // Head
+    ctx.fillStyle = flash ? '#ffffff' : c.body;
+    ctx.fillRect(-h * 0.35, -h * 1.65, h * 0.7, h * 0.5);
+    // Horns
+    ctx.strokeStyle = flash ? '#ffffff' : c.accent;
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(-h * 0.3, -h * 1.6);
+    ctx.quadraticCurveTo(-h * 0.5, -h * 2.0, -h * 0.15, -h * 2.2);
+    ctx.moveTo(h * 0.3, -h * 1.6);
+    ctx.quadraticCurveTo(h * 0.5, -h * 2.0, h * 0.15, -h * 2.2);
+    ctx.stroke();
+    // Eyes
+    ctx.fillStyle = flash ? '#ffffff' : c.accent;
+    ctx.shadowColor = c.accent;
+    ctx.shadowBlur = 12;
+    ctx.beginPath();
+    ctx.ellipse(-h * 0.15, -h * 1.42, h * 0.09, h * 0.14, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(h * 0.15, -h * 1.42, h * 0.09, h * 0.14, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+}
+
+// #5 IRON HYDRA — three serpentine heads on a heavy armored body
+function drawBossHydra(ctx, boss, h) {
+    const c = boss.def.colors;
+    const flash = boss.flashTimer > 0;
+    const headSway = Math.sin(boss.timer * 3);
+
+    // Body (armored mound)
+    ctx.fillStyle = flash ? '#ffffff' : c.body;
+    ctx.beginPath();
+    ctx.ellipse(0, h * 0.35, h * 0.95, h * 0.75, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Armor plates
+    ctx.strokeStyle = bossFlashColor(boss, c.dark);
+    ctx.lineWidth = 4;
+    for (let i = -2; i <= 2; i++) {
+        ctx.beginPath();
+        ctx.arc(i * h * 0.28, h * 0.2, h * 0.2, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+    // Eyes on body
+    ctx.fillStyle = flash ? '#ffffff' : c.accent;
+    ctx.shadowColor = c.accent;
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.arc(-h * 0.25, h * 0.25, h * 0.07, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(h * 0.25, h * 0.25, h * 0.07, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Three necks and heads
+    for (let i = -1; i <= 1; i++) {
+        const nx = i * h * 0.42;
+        const swayA = Math.sin(boss.timer * 3 + i * 2.1) * h * 0.12;
+        const hy = -h * 0.8 + Math.sin(boss.timer * 2 + i * 1.3) * h * 0.05;
+        // Neck
+        ctx.strokeStyle = bossFlashColor(boss, c.body);
+        ctx.lineWidth = h * 0.22;
+        ctx.beginPath();
+        ctx.moveTo(nx, h * 0.05);
+        ctx.quadraticCurveTo(nx * 1.3, hy, nx + swayA, hy - h * 0.45);
+        ctx.stroke();
+        // Head
+        ctx.fillStyle = flash ? '#ffffff' : c.body;
+        ctx.beginPath();
+        ctx.ellipse(nx + swayA, hy - h * 0.55, h * 0.2, h * 0.16, swayA * 0.2, 0, Math.PI * 2);
+        ctx.fill();
+        // Fangs + eye
+        ctx.fillStyle = flash ? '#ffffff' : '#e8e8e8';
+        ctx.beginPath();
+        ctx.moveTo(nx + swayA - h * 0.1, hy - h * 0.45);
+        ctx.lineTo(nx + swayA - h * 0.02, hy - h * 0.38);
+        ctx.lineTo(nx + swayA - h * 0.06, hy - h * 0.45);
+        ctx.fill();
+        ctx.fillStyle = flash ? '#ffffff' : c.accent;
+        ctx.shadowColor = c.accent;
+        ctx.shadowBlur = 6;
+        ctx.beginPath();
+        ctx.arc(nx + swayA, hy - h * 0.6, h * 0.05, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+    }
+}
+
+// #6 FROST BEHEMOTH — massive ice titan with tusks and frost aura
+function drawBossBehemoth(ctx, boss, h) {
+    const c = boss.def.colors;
+    const flash = boss.flashTimer > 0;
+    const bob = Math.sin(boss.timer * 1.5) * h * 0.02;
+
+    // Legs
+    ctx.fillStyle = bossFlashColor(boss, c.dark);
+    ctx.fillRect(-h * 0.6, h * 0.3 + bob, h * 0.3, h * 0.6);
+    ctx.fillRect(h * 0.3, h * 0.3 + bob, h * 0.3, h * 0.6);
+
+    // Massive body
+    ctx.fillStyle = flash ? '#ffffff' : c.body;
+    ctx.beginPath();
+    ctx.ellipse(0, h * 0.05 + bob, h * 1.0, h * 0.8, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Ice crystal spines on back
+    ctx.fillStyle = flash ? '#ffffff' : '#eef9ff';
+    for (let i = -2; i <= 2; i++) {
+        ctx.beginPath();
+        ctx.moveTo(i * h * 0.4 - h * 0.1, -h * 0.65 + bob);
+        ctx.lineTo(i * h * 0.4, -h * 1.15 + bob);
+        ctx.lineTo(i * h * 0.4 + h * 0.1, -h * 0.6 + bob);
+        ctx.fill();
+    }
+
+    // Head
+    ctx.fillStyle = flash ? '#ffffff' : c.body;
+    ctx.beginPath();
+    ctx.ellipse(0, -h * 0.75 + bob, h * 0.55, h * 0.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Tusks
+    ctx.fillStyle = flash ? '#ffffff' : '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(-h * 0.4, -h * 0.7 + bob);
+    ctx.quadraticCurveTo(-h * 0.7, -h * 0.4 + bob, -h * 0.55, -h * 0.15 + bob);
+    ctx.lineTo(-h * 0.3, -h * 0.5 + bob);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(h * 0.4, -h * 0.7 + bob);
+    ctx.quadraticCurveTo(h * 0.7, -h * 0.4 + bob, h * 0.55, -h * 0.15 + bob);
+    ctx.lineTo(h * 0.3, -h * 0.5 + bob);
+    ctx.fill();
+    // Icy eyes
+    ctx.fillStyle = flash ? '#ffffff' : '#cfefff';
+    ctx.shadowColor = c.orb;
+    ctx.shadowBlur = 10;
+    ctx.beginPath();
+    ctx.arc(-h * 0.2, -h * 0.85 + bob, h * 0.07, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(h * 0.2, -h * 0.85 + bob, h * 0.07, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+}
+
+// #7 STORM WYRM — lightning dragon with glowing wing membranes
+function drawBossWyrm(ctx, boss, h) {
+    const c = boss.def.colors;
+    const flash = boss.flashTimer > 0;
+    const flap = Math.sin(boss.timer * 10) * 0.15;
+
+    // Wings
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = hexToRgba(c.orb, 0.35);
+    ctx.beginPath();
+    ctx.moveTo(-h * 0.15, -h * 0.1);
+    ctx.quadraticCurveTo(-h * 1.4, -h * 0.5 + flap * h * 3, -h * 1.2, h * 0.4);
+    ctx.lineTo(-h * 0.2, h * 0.35);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(h * 0.15, -h * 0.1);
+    ctx.quadraticCurveTo(h * 1.4, -h * 0.5 + flap * h * 3, h * 1.2, h * 0.4);
+    ctx.lineTo(h * 0.2, h * 0.35);
+    ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+
+    // Sleek body
+    ctx.fillStyle = flash ? '#ffffff' : c.body;
+    ctx.beginPath();
+    ctx.moveTo(0, -h * 1.2);
+    ctx.bezierCurveTo(h * 0.6, -h * 0.8, h * 0.8, h * 0.2, h * 0.3, h * 0.7);
+    ctx.lineTo(0, h * 0.5);
+    ctx.lineTo(-h * 0.3, h * 0.7);
+    ctx.bezierCurveTo(-h * 0.8, h * 0.2, -h * 0.6, -h * 0.8, 0, -h * 1.2);
+    ctx.fill();
+
+    // Lightning arcs across body
+    ctx.strokeStyle = flash ? '#ffffff' : c.accent;
+    ctx.lineWidth = 2;
+    ctx.shadowColor = c.accent;
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.moveTo(-h * 0.4, 0);
+    ctx.lineTo(-h * 0.1, -h * 0.25);
+    ctx.lineTo(h * 0.05, -h * 0.05);
+    ctx.lineTo(h * 0.4, -h * 0.35);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Head + snout
+    ctx.fillStyle = flash ? '#ffffff' : c.body;
+    ctx.beginPath();
+    ctx.ellipse(0, -h * 1.3, h * 0.3, h * 0.24, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Snout
+    ctx.fillRect(-h * 0.1, -h * 1.5, h * 0.2, h * 0.2);
+    // Eyes
+    ctx.fillStyle = flash ? '#ffffff' : c.accent;
+    ctx.shadowColor = c.accent;
+    ctx.shadowBlur = 10;
+    ctx.beginPath();
+    ctx.arc(-h * 0.12, -h * 1.32, h * 0.06, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(h * 0.12, -h * 1.32, h * 0.06, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    // Horns
+    ctx.strokeStyle = flash ? '#ffffff' : c.accent;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(-h * 0.25, -h * 1.45);
+    ctx.quadraticCurveTo(-h * 0.35, -h * 1.8, -h * 0.1, -h * 1.85);
+    ctx.moveTo(h * 0.25, -h * 1.45);
+    ctx.quadraticCurveTo(h * 0.35, -h * 1.8, h * 0.1, -h * 1.85);
+    ctx.stroke();
+}
+
+// #8 NECRO LICH — hooded skeleton mage with a glowing staff
+function drawBossLich(ctx, boss, h) {
+    const c = boss.def.colors;
+    const flash = boss.flashTimer > 0;
+    const floatB = Math.sin(boss.timer * 3) * h * 0.03;
+
+    // Tattered robe
+    ctx.fillStyle = flash ? '#ffffff' : '#4a3a52';
+    ctx.beginPath();
+    ctx.moveTo(0, -h * 1.1);
+    ctx.bezierCurveTo(h * 0.6, -h * 0.8, h * 0.55, h * 0.4, 0, h * 1.15);
+    ctx.bezierCurveTo(-h * 0.55, h * 0.4, -h * 0.6, -h * 0.8, 0, -h * 1.1);
+    ctx.fill();
+    // Tattered hem
+    ctx.fillStyle = '#33283a';
+    ctx.beginPath();
+    ctx.moveTo(-h * 0.55, h * 0.5);
+    ctx.lineTo(-h * 0.45, h * 1.15);
+    ctx.lineTo(-h * 0.1, h * 0.95);
+    ctx.lineTo(h * 0.1, h * 1.15);
+    ctx.lineTo(h * 0.45, h * 0.95);
+    ctx.lineTo(h * 0.55, h * 0.55);
+    ctx.fill();
+
+    // Hood
+    ctx.fillStyle = flash ? '#ffffff' : '#2e2433';
+    ctx.beginPath();
+    ctx.arc(0, -h * 0.85, h * 0.42, 0, Math.PI * 2);
+    ctx.fill();
+    // Skull glowing inside hood
+    ctx.fillStyle = flash ? '#ffffff' : c.body;
+    ctx.beginPath();
+    ctx.arc(0, -h * 0.8 + floatB, h * 0.22, 0, Math.PI * 2);
+    ctx.fill();
+    // Eye sockets
+    ctx.fillStyle = flash ? '#ffffff' : c.accent;
+    ctx.shadowColor = c.accent;
+    ctx.shadowBlur = 12;
+    ctx.beginPath();
+    ctx.arc(-h * 0.09, -h * 0.82 + floatB, h * 0.06, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(h * 0.09, -h * 0.82 + floatB, h * 0.06, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Staff
+    ctx.strokeStyle = flash ? '#ffffff' : '#5a4632';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(h * 0.55, h * 0.9);
+    ctx.lineTo(h * 0.55, -h * 1.3);
+    ctx.stroke();
+    // Staff orb
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = hexToRgba(c.orb, 0.7 + Math.sin(boss.timer * 4) * 0.2);
+    ctx.beginPath();
+    ctx.arc(h * 0.55, -h * 1.45 + floatB, h * 0.12, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+}
+
+// #9 PLASMA ARACHNID — spiked mech-spider with a glowing plasma core
+function drawBossArachnid(ctx, boss, h) {
+    const c = boss.def.colors;
+    const flash = boss.flashTimer > 0;
+    const stepPhase = boss.timer * 14;
+
+    // Legs (8, animated in pairs)
+    ctx.strokeStyle = flash ? '#ffffff' : c.dark;
+    ctx.lineWidth = 4;
+    for (let i = 0; i < 4; i++) {
+        const ang = Math.PI * (0.55 + i * 0.22);
+        const legSwing = Math.sin(stepPhase + i) * h * 0.12;
+        const cx = (i % 2 === 0 ? -1 : 1) * h * 0.8;
+        // Back leg
+        ctx.beginPath();
+        ctx.moveTo(cx * 0.3, -h * 0.2);
+        ctx.lineTo(cx, h * 0.4 + legSwing);
+        ctx.stroke();
+        // Front leg
+        ctx.beginPath();
+        ctx.moveTo(cx * 0.3, h * 0.3);
+        ctx.lineTo(cx * 1.1, h * 0.9 - legSwing);
+        ctx.stroke();
+    }
+
+    // Abdomen
+    ctx.fillStyle = flash ? '#ffffff' : c.body;
+    ctx.beginPath();
+    ctx.ellipse(0, h * 0.55, h * 0.55, h * 0.7, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Abdomen stripes
+    ctx.strokeStyle = bossFlashColor(boss, c.dark);
+    ctx.lineWidth = 3;
+    for (let i = 0; i < 3; i++) {
+        ctx.beginPath();
+        ctx.ellipse(0, h * (0.35 + i * 0.2), h * (0.45 - i * 0.12), h * 0.1, 0, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+
+    // Cephalothorax
+    ctx.fillStyle = flash ? '#ffffff' : c.body;
+    ctx.beginPath();
+    ctx.ellipse(0, -h * 0.15, h * 0.5, h * 0.45, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Plasma core (pulsing)
+    ctx.globalCompositeOperation = 'lighter';
+    const coreR = h * 0.16 * (0.9 + Math.sin(boss.timer * 5) * 0.15);
+    const coreG = ctx.createRadialGradient(0, -h * 0.15, 0, 0, -h * 0.15, coreR * 2.5);
+    coreG.addColorStop(0, hexToRgba(c.orb, 0.9));
+    coreG.addColorStop(1, hexToRgba(c.orb, 0));
+    ctx.fillStyle = coreG;
+    ctx.beginPath();
+    ctx.arc(0, -h * 0.15, coreR * 2.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = flash ? '#ffffff' : '#ffffff';
+    ctx.beginPath();
+    ctx.arc(0, -h * 0.15, coreR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+
+    // Eyes (cluster)
+    ctx.fillStyle = flash ? '#ffffff' : c.accent;
+    ctx.shadowColor = c.accent;
+    ctx.shadowBlur = 8;
+    for (let i = -2; i <= 2; i++) {
+        ctx.beginPath();
+        ctx.arc(i * h * 0.08, -h * 0.35, h * 0.04, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    ctx.shadowBlur = 0;
+    // Mandibles
+    ctx.strokeStyle = flash ? '#ffffff' : c.dark;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(-h * 0.1, -h * 0.45);
+    ctx.lineTo(-h * 0.22, -h * 0.62);
+    ctx.moveTo(h * 0.1, -h * 0.45);
+    ctx.lineTo(h * 0.22, -h * 0.62);
+    ctx.stroke();
+}
+
+// #10 SOLAR TYRANT — blazing sun-king with a crown of rays
+function drawBossTyrant(ctx, boss, h) {
+    const c = boss.def.colors;
+    const flash = boss.flashTimer > 0;
+    const pulse = Math.sin(boss.timer * 4) * 0.08;
+
+    // Radiating rays (rotating)
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 12; i++) {
+        const a = (Math.PI * 2 / 12) * i + boss.timer * 0.8;
+        const len = h * (1.15 + pulse * 2);
+        ctx.strokeStyle = hexToRgba(c.orb, 0.4);
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * h * 0.8, Math.sin(a) * h * 0.8);
+        ctx.lineTo(Math.cos(a) * len, Math.sin(a) * len);
+        ctx.stroke();
+    }
+
+    // Corona
+    const corona = ctx.createRadialGradient(0, 0, 0, 0, 0, h * 1.1);
+    corona.addColorStop(0, hexToRgba(c.body, 0.8));
+    corona.addColorStop(0.6, hexToRgba(c.orb, 0.25));
+    corona.addColorStop(1, hexToRgba(c.orb, 0));
+    ctx.fillStyle = corona;
+    ctx.beginPath();
+    ctx.arc(0, 0, h * 1.1, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+
+    // Core
+    ctx.fillStyle = flash ? '#ffffff' : c.body;
+    ctx.beginPath();
+    ctx.arc(0, 0, h * 0.85 + pulse * h, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Crown spikes
+    ctx.fillStyle = flash ? '#ffffff' : c.accent;
+    for (let i = -1; i <= 1; i++) {
+        ctx.beginPath();
+        ctx.moveTo(i * h * 0.3 - h * 0.1, -h * 0.7);
+        ctx.lineTo(i * h * 0.3, -h * 1.15);
+        ctx.lineTo(i * h * 0.3 + h * 0.1, -h * 0.7);
+        ctx.fill();
+    }
+    // Central crown jewel
+    ctx.fillStyle = flash ? '#ffffff' : c.dark;
+    ctx.beginPath();
+    ctx.arc(0, -h * 0.35, h * 0.22, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Eyes
+    ctx.fillStyle = flash ? '#ffffff' : c.accent;
+    ctx.shadowColor = c.orb;
+    ctx.shadowBlur = 14;
+    ctx.beginPath();
+    ctx.arc(-h * 0.28, h * 0.15, h * 0.08, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(h * 0.28, h * 0.15, h * 0.08, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+}
+
 function drawBossHealthBar() {
     if (!boss) return;
 
     const barWidth = Math.min(BOSS_HEALTH_BAR_WIDTH, canvas.width * 0.5);
     const barHeight = BOSS_HEALTH_BAR_HEIGHT;
     const x = (canvas.width - barWidth) / 2;
-    const y = SAFE_TOP + 30;
+    // Position below the lives hearts (statusBar=8+38=46, hearts startY=54, height=64 → bottom=118)
+    const y = 8 + 38 + 8 + 64 + 8;
 
     // Background
     ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
@@ -6752,21 +7723,21 @@ function drawBossHealthBar() {
     ctx.fillStyle = '#333';
     ctx.fillRect(x, y, barWidth, barHeight);
 
-    // Health bar fill
+    // Health bar fill (boss-specific gradient)
     const healthPct = Math.max(0, boss.health / boss.maxHealth);
+    const gradA = boss.def.colors.orb;
     const gradient = ctx.createLinearGradient(x, y, x + barWidth * healthPct, y);
-    gradient.addColorStop(0, '#ff2200');
-    gradient.addColorStop(0.5, '#ff6600');
-    gradient.addColorStop(1, '#ffaa00');
+    gradient.addColorStop(0, hexToRgba(gradA, 1));
+    gradient.addColorStop(1, hexToRgba(gradA, 0.55));
     ctx.fillStyle = gradient;
     ctx.fillRect(x, y, barWidth * healthPct, barHeight);
 
-    // Health text
+    // Boss name + health text
     ctx.fillStyle = 'white';
-    ctx.font = `bold ${Math.min(12, canvas.width * 0.015)}px "Press Start 2P", monospace`;
+    ctx.font = `bold ${Math.min(13, canvas.width * 0.016)}px "Press Start 2P", monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(`BOSS  ${Math.ceil(boss.health)} / ${boss.maxHealth}`, canvas.width / 2, y + barHeight / 2);
+    ctx.fillText(`${boss.def.name}  ${Math.ceil(boss.health)} / ${boss.maxHealth}`, canvas.width / 2, y + barHeight / 2);
 }
 
 function drawBossOrbs() {
@@ -6777,24 +7748,27 @@ function drawBossOrbs() {
         if (screenX < -30 || screenX > canvas.width + 30 ||
             screenY < -30 || screenY > canvas.height + 30) continue;
 
+        const orbColor = orb.color || '#ff4400';
+        const orbColorLight = orb.color ? hexToRgba(orb.color, 0.6) : 'rgba(255, 170, 0, 0.6)';
+
         ctx.save();
         ctx.translate(screenX, screenY);
 
         // Glow
         ctx.globalCompositeOperation = 'lighter';
         const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, 20);
-        glow.addColorStop(0, 'rgba(255, 100, 0, 0.6)');
-        glow.addColorStop(1, 'rgba(255, 0, 0, 0)');
+        glow.addColorStop(0, hexToRgba(orbColor, 0.6));
+        glow.addColorStop(1, hexToRgba(orbColor, 0));
         ctx.fillStyle = glow;
         ctx.fillRect(-20, -20, 40, 40);
 
         // Core
         ctx.globalCompositeOperation = 'source-over';
-        ctx.fillStyle = '#ff4400';
+        ctx.fillStyle = orbColor;
         ctx.beginPath();
         ctx.arc(0, 0, 6, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = '#ffaa00';
+        ctx.fillStyle = '#ffffff';
         ctx.beginPath();
         ctx.arc(0, 0, 3, 0, Math.PI * 2);
         ctx.fill();
@@ -7014,7 +7988,9 @@ function gameLoop(timestamp) {
 
         if (spawnTimer >= currentSpawnInterval) {
             spawnTimer = 0;
-            spawnEnemy();
+            if (!levelData || !levelData.hasBoss) {
+                spawnEnemy();
+            }
         }
 
         // Update weapons (independent cooldowns)
@@ -7149,14 +8125,30 @@ function gameLoop(timestamp) {
         ctx.fillStyle = `rgba(255, 0, 0, ${warnAlpha})`;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        ctx.fillStyle = '#ff3300';
-        ctx.font = `bold ${Math.min(28, canvas.width * 0.035)}px "Press Start 2P", monospace`;
+        const bossDef = getBossDefForLevel(currentLevel);
+        const warnColor = bossDef.colors.orb;
+
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
+
+        ctx.fillStyle = '#ff3300';
+        ctx.font = `bold ${Math.min(24, canvas.width * 0.03)}px "Press Start 2P", monospace`;
         ctx.shadowColor = '#ff0000';
         ctx.shadowBlur = 20;
-        ctx.fillText('⚠ BOSS INCOMING ⚠', canvas.width / 2, canvas.height / 2);
+        ctx.fillText('⚠ BOSS INCOMING ⚠', canvas.width / 2, canvas.height / 2 - 40);
         ctx.shadowBlur = 0;
+
+        // Boss identity card
+        ctx.fillStyle = warnColor;
+        ctx.font = `bold ${Math.min(34, canvas.width * 0.042)}px "Press Start 2P", monospace`;
+        ctx.shadowColor = warnColor;
+        ctx.shadowBlur = 24;
+        ctx.fillText(bossDef.name, canvas.width / 2, canvas.height / 2 + 10);
+        ctx.shadowBlur = 0;
+
+        ctx.fillStyle = 'rgba(255,255,255,0.8)';
+        ctx.font = `bold ${Math.min(12, canvas.width * 0.015)}px "Press Start 2P", monospace`;
+        ctx.fillText(`BOSS  ${bossDef.name}`, canvas.width / 2, canvas.height / 2 + 70);
     }
 
     if (gameState === 'gameover') {
