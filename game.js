@@ -1178,7 +1178,7 @@ function spawnSparkExplosion(x, y, count) {
             x, y,
             Math.cos(angle) * speed,
             Math.sin(angle) * speed,
-            life, size, ['#ff8800', '#ff6600', '#ffaa33', '#ff4400'][Math.floor(Math.random() * 4)], 50
+            life, size, ['#cccccc', '#aaaaaa', '#dddddd', '#888888'][Math.floor(Math.random() * 4)], 50
         );
     }
 }
