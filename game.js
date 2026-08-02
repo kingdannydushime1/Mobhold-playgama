@@ -4310,6 +4310,9 @@ function drawBlood() {
     const BLOOD_TILE_SIZE = 32; // 128x128 sprite sheet / 4x4 grid = 32px tiles
     const bloodSize = SCALED_TILE*2;
 
+    ctx.save();
+    ctx.filter = 'grayscale(1) brightness(1.2)';
+
     for (const blood of bloodSplatters) {
         // Viewport culling - skip offscreen blood
         if (!isInViewport(blood.x, blood.y, bloodSize)) continue;
@@ -4327,6 +4330,8 @@ function drawBlood() {
             screenX, screenY, bloodSize, bloodSize
         );
     }
+
+    ctx.restore();
 }
 
 function drawPointsStatusBar() {
@@ -6906,9 +6911,9 @@ function drawComboFlash() {
         canvas.width / 2, canvas.height / 2, 0,
         canvas.width / 2, canvas.height / 2, canvas.width * 0.7
     );
-    gradient.addColorStop(0, 'rgba(255, 200, 50, 0.4)');
-    gradient.addColorStop(0.5, 'rgba(255, 100, 20, 0.2)');
-    gradient.addColorStop(1, 'rgba(255, 50, 0, 0)');
+    gradient.addColorStop(0, 'rgba(220, 220, 220, 0.4)');
+    gradient.addColorStop(0.5, 'rgba(160, 160, 160, 0.2)');
+    gradient.addColorStop(1, 'rgba(120, 120, 120, 0)');
 
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
